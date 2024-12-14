@@ -118,8 +118,6 @@ type Rgeo struct {
 // well. Cities10 only includes cities so you'll probably want to use
 // Provinces10 with it.
 func New(datasets ...func() []byte) (*Rgeo, error) {
-	// Parse GeoJSON
-	var fc geojson.FeatureCollection
 
 	// Initialise Rgeo struct
 	ret := new(Rgeo)
@@ -148,8 +146,6 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 			return nil, fmt.Errorf("failed to close gzip reader for dataset %d: %w", i, err)
 		}
 
-		fc.Features = append(fc.Features, tfc.Features...)
-
 		datasetName := getFunctionName(dataset)
 		shpGeoms, ok := ret.geoms[datasetName]
 		if !ok {
@@ -160,7 +156,7 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 			// Convert GeoJSON features from geom (multi)polygons to s2 polygons
 			p, err := polygonFromGeometry(c.Geometry)
 			if err != nil {
-				return nil, fmt.Errorf("bad polygon in geometry: %w", err)
+				return nil, fmt.Errorf("%s bad polygon in geometry: %w", datasetName, err)
 			}
 			ret.geoms[datasetName][p] = c.Geometry
 
@@ -192,7 +188,7 @@ func (r *Rgeo) DatasetNames() []string {
 
 // ReverseGeocode returns the country in which the given coordinate is located.
 //
-// The input is a geom.Coord, which is just a []float64 with the longitude
+// The input is an orb.Point, which is just a []float64 with the longitude
 // in the zeroth position and the latitude in the first position
 // (i.e. []float64{lon, lat}).
 func (r *Rgeo) ReverseGeocode(loc orb.Point) (Location, error) {
