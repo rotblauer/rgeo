@@ -18,7 +18,9 @@ package rgeo
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
+	"github.com/paulmach/orb"
 	"math/rand"
 	"testing"
 
@@ -267,8 +269,8 @@ func TestReverseGeocode(t *testing.T) {
 		test := test
 
 		t.Run(test.name, func(t *testing.T) {
-			result, err := r.ReverseGeocode(test.in)
-			if err != test.err {
+			result, err := r.ReverseGeocode(orb.Point{test.in[0], test.in[1]})
+			if !errors.Is(err, test.err) {
 				t.Errorf("expected error: %s\n got: %s\n", test.err, err)
 			}
 			if diff := deep.Equal(test.expected, result); diff != nil {
@@ -298,7 +300,7 @@ func TestReverseGeocode_Countries(t *testing.T) {
 			test.expected.City = ""
 
 			t.Run(test.name, func(t *testing.T) {
-				result, err := r.ReverseGeocode(test.in)
+				result, err := r.ReverseGeocode(orb.Point{test.in[0], test.in[1]})
 				if err != test.err {
 					t.Errorf("expected error: %s\n got: %s\n", test.err, err)
 				}
@@ -327,7 +329,7 @@ func TestReverseGeocode_Provinces(t *testing.T) {
 		test.expected.City = ""
 
 		t.Run(test.name, func(t *testing.T) {
-			result, err := r.ReverseGeocode(test.in)
+			result, err := r.ReverseGeocode(orb.Point{test.in[0], test.in[1]})
 			if err != test.err {
 				t.Errorf("expected error: %s\n got: %s\n", test.err, err)
 			}
@@ -354,8 +356,8 @@ func TestReverseGeocode_Counties(t *testing.T) {
 		test.expected.City = ""
 
 		t.Run(test.name, func(t *testing.T) {
-			result, err := r.ReverseGeocode(test.in)
-			if err != test.err {
+			result, err := r.ReverseGeocode(orb.Point{test.in[0], test.in[1]})
+			if !errors.Is(err, test.err) {
 				t.Errorf("expected error: %s\n got: %s\n", test.err, err)
 			}
 			if diff := deep.Equal(test.expected, result); diff != nil {
@@ -381,7 +383,7 @@ func TestReverseGeocode_Cities(t *testing.T) {
 		test.expected.County = ""
 
 		t.Run(test.name, func(t *testing.T) {
-			result, err := r.ReverseGeocode(test.in)
+			result, err := r.ReverseGeocode(orb.Point{test.in[0], test.in[1]})
 			if err != test.err {
 				t.Errorf("expected error: %s\n got: %s\n", test.err, err)
 			}
@@ -437,7 +439,7 @@ func TestNew_BadData(t *testing.T) {
 				)
 			},
 			err: "bad polygon in geometry: " +
-				"last coordinate not same as first for polygon: [1 2 3 4 5 6 7 8]",
+				"last coordinate not same as first for polygon: [[[1 2] [3 4] [5 6] [7 8]]]",
 		},
 		{
 			name: "Bad Multipolygon",
@@ -450,7 +452,7 @@ func TestNew_BadData(t *testing.T) {
 				)
 			},
 			err: "bad polygon in geometry: " +
-				"last coordinate not same as first for polygon: [1 2 3 4 5 6 7 8]",
+				"last coordinate not same as first for polygon: [[[1 2] [3 4] [5 6] [7 8]]]",
 		},
 		{
 			name: "Bad compression",
@@ -540,7 +542,7 @@ func ExampleRgeo_ReverseGeocode() {
 		// Handle error
 	}
 
-	loc, err := r.ReverseGeocode([]float64{0, 52})
+	loc, err := r.ReverseGeocode(orb.Point{0, 52})
 	if err != nil {
 		// Handle error
 	}
@@ -568,7 +570,7 @@ func ExampleRgeo_ReverseGeocode_city() {
 		// Handle error
 	}
 
-	loc, err := r.ReverseGeocode([]float64{141.35, 43.07})
+	loc, err := r.ReverseGeocode(orb.Point{141.35, 43.07})
 	if err != nil {
 		// Handle error
 	}
@@ -586,7 +588,7 @@ func BenchmarkReverseGeocode_110(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = r.ReverseGeocode([]float64{
+		_, _ = r.ReverseGeocode(orb.Point{
 			(rand.Float64() * 360) - 180,
 			(rand.Float64() * 180) - 90,
 		})
@@ -602,7 +604,7 @@ func BenchmarkReverseGeocode_10(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = r.ReverseGeocode([]float64{
+		_, _ = r.ReverseGeocode(orb.Point{
 			(rand.Float64() * 360) - 180,
 			(rand.Float64() * 180) - 90,
 		})
@@ -618,7 +620,7 @@ func BenchmarkReverseGeocode_Prov10(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = r.ReverseGeocode([]float64{
+		_, _ = r.ReverseGeocode(orb.Point{
 			(rand.Float64() * 360) - 180,
 			(rand.Float64() * 180) - 90,
 		})
@@ -634,7 +636,7 @@ func BenchmarkReverseGeocode_City10(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, _ = r.ReverseGeocode([]float64{
+		_, _ = r.ReverseGeocode(orb.Point{
 			(rand.Float64() * 360) - 180,
 			(rand.Float64() * 180) - 90,
 		})

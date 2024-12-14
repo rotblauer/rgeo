@@ -42,11 +42,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/paulmach/orb"
 	"strings"
 
 	"github.com/golang/geo/s2"
-	"github.com/twpayne/go-geom"
-	"github.com/twpayne/go-geom/encoding/geojson"
+	"github.com/paulmach/orb/geojson"
 )
 
 // ErrLocationNotFound is returned when no country is found for given
@@ -158,7 +158,7 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 // The input is a geom.Coord, which is just a []float64 with the longitude
 // in the zeroth position and the latitude in the first position
 // (i.e. []float64{lon, lat}).
-func (r *Rgeo) ReverseGeocode(loc geom.Coord) (Location, error) {
+func (r *Rgeo) ReverseGeocode(loc orb.Point) (Location, error) {
 	res := r.query.ContainingShapes(pointFromCoord(loc))
 	if len(res) == 0 {
 		return Location{}, ErrLocationNotFound
@@ -235,16 +235,16 @@ func getPropertyString(m map[string]interface{}, keys ...string) (s string) {
 }
 
 // polygonFromGeometry converts a geom.T to an s2 Polygon.
-func polygonFromGeometry(g geom.T) (*s2.Polygon, error) {
+func polygonFromGeometry(g orb.Geometry) (*s2.Polygon, error) {
 	var (
 		polygon *s2.Polygon
 		err     error
 	)
 
 	switch t := g.(type) {
-	case *geom.Polygon:
+	case orb.Polygon:
 		polygon, err = polygonFromPolygon(t)
-	case *geom.MultiPolygon:
+	case orb.MultiPolygon:
 		polygon, err = polygonFromMultiPolygon(t)
 	default:
 		return nil, errors.New("needs Polygon or MultiPolygon")
@@ -258,11 +258,11 @@ func polygonFromGeometry(g geom.T) (*s2.Polygon, error) {
 }
 
 // Converts a geom MultiPolygon to an s2 Polygon.
-func polygonFromMultiPolygon(p *geom.MultiPolygon) (*s2.Polygon, error) {
-	loops := make([]*s2.Loop, 0, p.NumPolygons())
+func polygonFromMultiPolygon(p orb.MultiPolygon) (*s2.Polygon, error) {
+	loops := make([]*s2.Loop, 0, len(p))
 
-	for i := 0; i < p.NumPolygons(); i++ {
-		this, err := loopSliceFromPolygon(p.Polygon(i))
+	for i := 0; i < len(p); i++ {
+		this, err := loopSliceFromPolygon(p[i])
 		if err != nil {
 			return nil, err
 		}
@@ -274,7 +274,7 @@ func polygonFromMultiPolygon(p *geom.MultiPolygon) (*s2.Polygon, error) {
 }
 
 // Converts a geom Polygon to an s2 Polygon.
-func polygonFromPolygon(p *geom.Polygon) (*s2.Polygon, error) {
+func polygonFromPolygon(p orb.Polygon) (*s2.Polygon, error) {
 	loops, err := loopSliceFromPolygon(p)
 	return s2.PolygonFromLoops(loops), err
 }
@@ -282,20 +282,20 @@ func polygonFromPolygon(p *geom.Polygon) (*s2.Polygon, error) {
 // Converts a geom Polygon to slice of s2 Loop.
 //
 // Modified from types.loopFromPolygon from github.com/dgraph-io/dgraph.
-func loopSliceFromPolygon(p *geom.Polygon) ([]*s2.Loop, error) {
-	loops := make([]*s2.Loop, 0, p.NumLinearRings())
+func loopSliceFromPolygon(p orb.Polygon) ([]*s2.Loop, error) {
+	loops := make([]*s2.Loop, 0, len(p))
 
-	for i := 0; i < p.NumLinearRings(); i++ {
-		r := p.LinearRing(i)
-		n := r.NumCoords()
+	for i := 0; i < len(p); i++ {
+		r := p[i]
+		n := len(r)
 
 		if n < 4 {
 			return nil, errors.New("can't convert ring with less than 4 points")
 		}
 
-		if !r.Coord(0).Equal(geom.XY, r.Coord(n-1)) {
+		if !r[0].Equal(r[n-1]) {
 			return nil, fmt.Errorf(
-				"last coordinate not same as first for polygon: %+v", p.FlatCoords())
+				"last coordinate not same as first for polygon: %+v", p)
 		}
 
 		// S2 specifies that the orientation of the polygons should be CCW.
@@ -325,36 +325,37 @@ func loopSliceFromPolygon(p *geom.Polygon) ([]*s2.Loop, error) {
 // approximation instead.
 //
 // From github.com/dgraph-io/dgraph
-func isClockwise(r *geom.LinearRing) bool {
+func isClockwise(r orb.Ring) bool {
+	return r.Orientation() == -1
 	// The algorithm is described here
 	// https://en.wikipedia.org/wiki/Shoelace_formula
-	var a float64
-
-	n := r.NumCoords()
-
-	for i := 0; i < n; i++ {
-		p1 := r.Coord(i)
-		p2 := r.Coord((i + 1) % n)
-		a += (p2.X() - p1.X()) * (p1.Y() + p2.Y())
-	}
-
-	return a > 0
+	//var a float64
+	//
+	//n := r.NumCoords()
+	//
+	//for i := 0; i < n; i++ {
+	//	p1 := r.Coord(i)
+	//	p2 := r.Coord((i + 1) % n)
+	//	a += (p2.X() - p1.X()) * (p1.Y() + p2.Y())
+	//}
+	//
+	//return a > 0
 }
 
 // From github.com/dgraph-io/dgraph
-func loopFromRing(r *geom.LinearRing, reverse bool) *s2.Loop {
+func loopFromRing(r orb.Ring, reverse bool) *s2.Loop {
 	// In WKB, the last coordinate is repeated for a ring to form a closed loop.
 	// For s2 the points aren't allowed to repeat and the loop is assumed to be
 	// closed, so we skip the last point.
-	n := r.NumCoords()
+	n := len(r)
 	pts := make([]s2.Point, n-1)
 
 	for i := 0; i < n-1; i++ {
-		var c geom.Coord
+		var c orb.Point
 		if reverse {
-			c = r.Coord(n - 1 - i)
+			c = r[n-1-i]
 		} else {
-			c = r.Coord(i)
+			c = r[i]
 		}
 
 		pts[i] = pointFromCoord(c)
@@ -364,7 +365,7 @@ func loopFromRing(r *geom.LinearRing, reverse bool) *s2.Loop {
 }
 
 // From github.com/dgraph-io/dgraph
-func pointFromCoord(r geom.Coord) s2.Point {
+func pointFromCoord(r orb.Point) s2.Point {
 	// The GeoJSON spec says that coordinates are specified as [long, lat]
 	// We assume that any data encoded in the database follows that format.
 	ll := s2.LatLngFromDegrees(r.Y(), r.X())
