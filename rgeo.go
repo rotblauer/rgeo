@@ -43,6 +43,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/paulmach/orb"
+	"log"
+	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 
 	"github.com/golang/geo/s2"
@@ -79,10 +83,23 @@ type Location struct {
 	City string `json:"city,omitempty"`
 }
 
+type LocationWithGeometry struct {
+	Location
+	Geometry orb.Geometry `json:"geometry"`
+}
+
+type GeomLookup map[string]map[s2.Shape]orb.Geometry
+
+// getFunctionName returns rgeo.Countries110, rgeo.Countries10, etc.
+func getFunctionName(i interface{}) string {
+	return filepath.Base(runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name())
+}
+
 // Rgeo is the type used to hold pre-created polygons for reverse geocoding.
 type Rgeo struct {
 	index *s2.ShapeIndex
 	locs  map[s2.Shape]Location
+	geoms GeomLookup
 	query *s2.ContainsPointQuery
 }
 
@@ -103,6 +120,9 @@ type Rgeo struct {
 func New(datasets ...func() []byte) (*Rgeo, error) {
 	// Parse GeoJSON
 	var fc geojson.FeatureCollection
+
+	ret := new(Rgeo)
+	ret.geoms = GeomLookup{}
 
 	for i, dataset := range datasets {
 		br := bytes.NewReader(dataset())
@@ -126,10 +146,23 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 		}
 
 		fc.Features = append(fc.Features, tfc.Features...)
+
+		datasetName := getFunctionName(dataset)
+		shpGeoms, ok := ret.geoms[datasetName]
+		if !ok {
+			shpGeoms = make(map[s2.Shape]orb.Geometry, len(tfc.Features))
+			ret.geoms[datasetName] = shpGeoms
+		}
+		for _, c := range tfc.Features {
+			p, err := polygonFromGeometry(c.Geometry)
+			if err != nil {
+				return nil, fmt.Errorf("bad polygon in geometry: %w", err)
+			}
+			ret.geoms[datasetName][p] = c.Geometry
+		}
 	}
 
 	// Initialise Rgeo struct
-	ret := new(Rgeo)
 	ret.index = s2.NewShapeIndex()
 	ret.locs = make(map[s2.Shape]Location)
 
@@ -145,7 +178,8 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 		// The s2 ContainsPointQuery returns the shapes that contain the given
 		// point, but I haven't found any way to attach the location information
 		// to the shapes, so I use a map to get the information.
-		ret.locs[p] = getLocationStrings(c.Properties)
+		loc := getLocationStrings(c.Properties)
+		ret.locs[p] = loc
 	}
 
 	ret.query = s2.NewContainsPointQuery(ret.index, s2.VertexModelOpen)
@@ -187,6 +221,52 @@ func (r *Rgeo) combineLocations(s []s2.Shape) (l Location) {
 	}
 
 	return
+}
+
+func (r *Rgeo) ReverseGeocodeWithGeometry(loc orb.Point, dataset string) (LocationWithGeometry, error) {
+	res := r.query.ContainingShapes(pointFromCoord(loc))
+	if len(res) == 0 {
+		return LocationWithGeometry{}, ErrLocationNotFound
+	}
+
+	out := LocationWithGeometry{
+		Location: r.combineLocations(res),
+	}
+
+	if dataset != "" {
+		shpGeom, ok := r.geoms[dataset]
+		if !ok {
+			return out, fmt.Errorf("dataset not found: %q", dataset)
+		}
+		log.Println(dataset, "dataset matched, len", len(shpGeom), "shapes", len(res))
+		for _, shp := range res {
+			geom, ok := shpGeom[shp]
+			if ok {
+				out.Geometry = geom
+				return out, nil
+			}
+			//if v, ok := shpGeom[shp]; ok {
+			//	out.Geometry = v
+			//	return out, nil
+			//}
+			log.Println("no shape found :(", geom)
+		}
+		return out, fmt.Errorf("no geometry found for dataset %q", dataset)
+	}
+
+	// lookup first matching geometry for first result
+	for _, shape := range res {
+		for _, shapeGeometry := range r.geoms {
+			if g, ok := shapeGeometry[shape]; ok {
+				out.Geometry = g
+				return out, nil
+			}
+		}
+	}
+
+	//panic("no geometry found")
+
+	return out, nil
 }
 
 // firstNonEmpty returns the first non empty parameter.

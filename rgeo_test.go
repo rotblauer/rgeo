@@ -229,6 +229,13 @@ var testdata = []struct {
 	},
 }
 
+func TestGetFunctionName(t *testing.T) {
+	got := getFunctionName(Countries110)
+	if got != "github.com/sams96/rgeo.Countries110" {
+		t.Errorf("expected Countries110, got %s", got)
+	}
+}
+
 func TestReverseGeocode(t *testing.T) {
 	testgeo := `{
 		"type":"FeatureCollection",
@@ -260,7 +267,8 @@ func TestReverseGeocode(t *testing.T) {
 		},
 	}
 
-	r, err := New(func() []byte { return compressData(t, testgeo) })
+	myfn := func() []byte { return compressData(t, testgeo) }
+	r, err := New(myfn)
 	if err != nil {
 		t.Error(err)
 	}
@@ -276,6 +284,15 @@ func TestReverseGeocode(t *testing.T) {
 			if diff := deep.Equal(test.expected, result); diff != nil {
 				t.Error(diff)
 			}
+
+			resultG, err := r.ReverseGeocodeWithGeometry(orb.Point{test.in[0], test.in[1]}, getFunctionName(myfn))
+			if !errors.Is(err, test.err) {
+				t.Errorf("expected error: %s\n got: %s\n", test.err, err)
+			}
+			if test.err == nil && resultG.Geometry == nil {
+				t.Error("nil geometry")
+				t.Log(r.geoms)
+			}
 		})
 	}
 }
@@ -287,6 +304,12 @@ func TestReverseGeocode_Countries(t *testing.T) {
 
 	for _, dataset := range []func() []byte{Countries110, Countries10} {
 		r, err := New(dataset)
+		name := getFunctionName(dataset)
+
+		for k, v := range r.geoms {
+			t.Log("dataset.name", name, "key", k, "geometry.len", len(v))
+		}
+
 		if err != nil {
 			t.Error(err)
 		}
@@ -306,6 +329,15 @@ func TestReverseGeocode_Countries(t *testing.T) {
 				}
 				if diff := deep.Equal(test.expected, result); diff != nil {
 					t.Error(diff)
+				}
+
+				resultG, err := r.ReverseGeocodeWithGeometry(orb.Point{test.in[0], test.in[1]}, name)
+				if err != test.err {
+					t.Errorf("expected error: %s\n got: %s\n", test.err, err)
+				}
+				if err == nil && resultG.Geometry == nil {
+					t.Error("nil geometry")
+					//t.Log(r.geoms)
 				}
 			})
 		}
