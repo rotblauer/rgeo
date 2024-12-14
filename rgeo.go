@@ -88,8 +88,6 @@ type LocationWithGeometry struct {
 	Geometry orb.Geometry `json:"geometry"`
 }
 
-type GeomLookup map[string]map[s2.Shape]orb.Geometry
-
 // getFunctionName returns rgeo.Countries110, rgeo.Countries10, etc.
 func getFunctionName(i interface{}) string {
 	return filepath.Base(runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name())
@@ -97,10 +95,20 @@ func getFunctionName(i interface{}) string {
 
 // Rgeo is the type used to hold pre-created polygons for reverse geocoding.
 type Rgeo struct {
-	index *s2.ShapeIndex
-	locs  map[s2.Shape]Location
-	geoms GeomLookup
-	query *s2.ContainsPointQuery
+	index        *s2.ShapeIndex
+	locs         map[s2.Shape]Location
+	datasetNames []string
+	datasetGeoms []map[s2.Shape]orb.Geometry
+	query        *s2.ContainsPointQuery
+}
+
+func (r *Rgeo) getDatasetIndex(name string) int {
+	for i, n := range r.datasetNames {
+		if n == name {
+			return i
+		}
+	}
+	return -1
 }
 
 // Go generate commands to regenerate the included datasets, this assumes you
@@ -121,8 +129,13 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 	// Parse GeoJSON
 	var fc geojson.FeatureCollection
 
+	// Initialise Rgeo struct
+
 	ret := new(Rgeo)
-	ret.geoms = GeomLookup{}
+	ret.datasetNames = make([]string, len(datasets))
+	ret.datasetGeoms = make([]map[s2.Shape]orb.Geometry, len(datasets))
+	ret.index = s2.NewShapeIndex()
+	ret.locs = make(map[s2.Shape]Location)
 
 	for i, dataset := range datasets {
 		br := bytes.NewReader(dataset())
@@ -148,38 +161,25 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 		fc.Features = append(fc.Features, tfc.Features...)
 
 		datasetName := getFunctionName(dataset)
-		shpGeoms, ok := ret.geoms[datasetName]
-		if !ok {
-			shpGeoms = make(map[s2.Shape]orb.Geometry, len(tfc.Features))
-			ret.geoms[datasetName] = shpGeoms
-		}
+		ret.datasetNames[i] = datasetName
+		ret.datasetGeoms[i] = make(map[s2.Shape]orb.Geometry)
 		for _, c := range tfc.Features {
+
+			// Convert GeoJSON features from geom (multi)polygons to s2 polygons
 			p, err := polygonFromGeometry(c.Geometry)
 			if err != nil {
 				return nil, fmt.Errorf("bad polygon in geometry: %w", err)
 			}
-			ret.geoms[datasetName][p] = c.Geometry
+			ret.datasetGeoms[i][p] = c.Geometry
+
+			ret.index.Add(p)
+
+			// The s2 ContainsPointQuery returns the shapes that contain the given
+			// point, but I haven't found any way to attach the location information
+			// to the shapes, so I use a map to get the information.
+			loc := getLocationStrings(c.Properties)
+			ret.locs[p] = loc
 		}
-	}
-
-	// Initialise Rgeo struct
-	ret.index = s2.NewShapeIndex()
-	ret.locs = make(map[s2.Shape]Location)
-
-	// Convert GeoJSON features from geom (multi)polygons to s2 polygons
-	for _, c := range fc.Features {
-		p, err := polygonFromGeometry(c.Geometry)
-		if err != nil {
-			return nil, fmt.Errorf("bad polygon in geometry: %w", err)
-		}
-
-		ret.index.Add(p)
-
-		// The s2 ContainsPointQuery returns the shapes that contain the given
-		// point, but I haven't found any way to attach the location information
-		// to the shapes, so I use a map to get the information.
-		loc := getLocationStrings(c.Properties)
-		ret.locs[p] = loc
 	}
 
 	ret.query = s2.NewContainsPointQuery(ret.index, s2.VertexModelOpen)
@@ -234,10 +234,15 @@ func (r *Rgeo) ReverseGeocodeWithGeometry(loc orb.Point, dataset string) (Locati
 	}
 
 	if dataset != "" {
-		shpGeom, ok := r.geoms[dataset]
-		if !ok {
+		//shpGeom, ok := r.datasetGeoms[dataset]
+		//if !ok {
+		//	return out, fmt.Errorf("dataset not found: %q", dataset)
+		//}
+		geomIdx := r.getDatasetIndex(dataset)
+		if geomIdx == -1 {
 			return out, fmt.Errorf("dataset not found: %q", dataset)
 		}
+		shpGeom := r.datasetGeoms[geomIdx]
 		log.Println(dataset, "dataset matched, len", len(shpGeom), "shapes", len(res))
 		for _, shp := range res {
 			geom, ok := shpGeom[shp]
@@ -256,7 +261,7 @@ func (r *Rgeo) ReverseGeocodeWithGeometry(loc orb.Point, dataset string) (Locati
 
 	// lookup first matching geometry for first result
 	for _, shape := range res {
-		for _, shapeGeometry := range r.geoms {
+		for _, shapeGeometry := range r.datasetGeoms {
 			if g, ok := shapeGeometry[shape]; ok {
 				out.Geometry = g
 				return out, nil
