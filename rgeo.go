@@ -46,6 +46,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/golang/geo/s2"
@@ -183,6 +184,9 @@ func (r *Rgeo) DatasetNames() []string {
 	for k := range r.geoms {
 		names = append(names, k)
 	}
+	sort.Slice(names, func(i, j int) bool {
+		return strings.Compare(names[i], names[j]) < 0
+	})
 	return names
 }
 

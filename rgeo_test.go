@@ -253,12 +253,12 @@ func TestGetFunctionName(t *testing.T) {
 
 func TestDatasetNames(t *testing.T) {
 	t.Skip("Long running, lots to load.")
-	r, err := New(Countries110, Countries10, Provinces10, US_Counties10, Cities10)
+	r, err := New(Countries10, Provinces10, US_Counties10, Cities10)
 	if err != nil {
 		t.Error(err)
 	}
 
-	expected := []string{"rgeo.Countries110", "rgeo.Countries10", "rgeo.Provinces10", "rgeo.US_Counties10", "rgeo.Cities10"}
+	expected := []string{"rgeo.Cities10", "rgeo.Countries10", "rgeo.Provinces10", "rgeo.US_Counties10"}
 	for i, name := range r.DatasetNames() {
 		if name != expected[i] {
 			t.Errorf("expected: %s, got: %s", expected[i], name)
