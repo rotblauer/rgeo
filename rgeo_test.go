@@ -291,7 +291,7 @@ func TestReverseGeocode(t *testing.T) {
 			}
 			if test.err == nil && resultG.Geometry == nil {
 				t.Error("nil geometry")
-				t.Log(r.datasetGeoms)
+				t.Log(r.geoms)
 			}
 		})
 	}
@@ -306,7 +306,7 @@ func TestReverseGeocode_Countries(t *testing.T) {
 		r, err := New(dataset)
 		name := getFunctionName(dataset)
 
-		for k, v := range r.datasetGeoms {
+		for k, v := range r.geoms {
 			t.Log("dataset.name", name, "key", k, "geometry.len", len(v))
 		}
 
