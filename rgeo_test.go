@@ -230,9 +230,39 @@ var testdata = []struct {
 }
 
 func TestGetFunctionName(t *testing.T) {
-	got := getFunctionName(Countries110)
-	if got != "github.com/sams96/rgeo.Countries110" {
-		t.Errorf("expected Countries110, got %s", got)
+	cases := []struct {
+		name string
+		fn   func() []byte
+	}{
+		{"rgeo.Countries110", Countries110},
+		{"rgeo.Countries10", Countries10},
+		{"rgeo.Provinces10", Provinces10},
+		{"rgeo.US_Counties10", US_Counties10},
+		{"rgeo.Cities10", Cities10},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			name := getFunctionName(c.fn)
+			if name != c.name {
+				t.Errorf("expected: %s, got: %s", c.name, name)
+			}
+		})
+	}
+}
+
+func TestDatasetNames(t *testing.T) {
+	t.Skip("Long running, lots to load.")
+	r, err := New(Countries110, Countries10, Provinces10, US_Counties10, Cities10)
+	if err != nil {
+		t.Error(err)
+	}
+
+	expected := []string{"rgeo.Countries110", "rgeo.Countries10", "rgeo.Provinces10", "rgeo.US_Counties10", "rgeo.Cities10"}
+	for i, name := range r.DatasetNames() {
+		if name != expected[i] {
+			t.Errorf("expected: %s, got: %s", expected[i], name)
+		}
 	}
 }
 
