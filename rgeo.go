@@ -47,6 +47,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/golang/geo/s2"
 	"github.com/paulmach/orb/geojson"
@@ -169,10 +170,20 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 		}
 	}
 
+	/*
+		ContainsPointQuery determines whether one or more shapes in a ShapeIndex contain a given Point. The ShapeIndex may contain any number of points, polylines, and/ or polygons (possibly overlapping). Shape boundaries may be modeled as Open, SemiOpen, or Closed (this affects whether or not shapes are considered to contain their vertices).
+		***************************************************
+		**** This type is not safe for concurrent use. ****
+		***************************************************
+	*/
 	ret.query = s2.NewContainsPointQuery(ret.index, s2.VertexModelOpen)
 
 	return ret, nil
 }
+
+// containsPointQueryLock is used to prevent concurrent access to the ContainsPointQuery.
+// The type is not safe for concurrent use.
+var containsPointQueryLock = sync.Mutex{}
 
 func (r *Rgeo) DatasetNames() []string {
 	names := make([]string, 0, len(r.geoms))
@@ -191,7 +202,9 @@ func (r *Rgeo) DatasetNames() []string {
 // in the zeroth position and the latitude in the first position
 // (i.e. []float64{lon, lat}).
 func (r *Rgeo) ReverseGeocode(loc orb.Point) (Location, error) {
+	containsPointQueryLock.Lock()
 	res := r.query.ContainingShapes(pointFromCoord(loc))
+	containsPointQueryLock.Unlock()
 	if len(res) == 0 {
 		return Location{}, ErrLocationNotFound
 	}
@@ -222,7 +235,9 @@ func (r *Rgeo) combineLocations(s []s2.Shape) (l Location) {
 }
 
 func (r *Rgeo) ReverseGeocodeWithGeometry(loc orb.Point, dataset string) (LocationWithGeometry, error) {
+	containsPointQueryLock.Lock()
 	res := r.query.ContainingShapes(pointFromCoord(loc))
+	containsPointQueryLock.Unlock()
 	if len(res) == 0 {
 		return LocationWithGeometry{}, ErrLocationNotFound
 	}
