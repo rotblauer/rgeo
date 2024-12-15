@@ -234,11 +234,11 @@ func TestGetFunctionName(t *testing.T) {
 		name string
 		fn   func() []byte
 	}{
-		{"rgeo.Countries110", Countries110},
-		{"rgeo.Countries10", Countries10},
-		{"rgeo.Provinces10", Provinces10},
-		{"rgeo.US_Counties10", US_Counties10},
-		{"rgeo.Cities10", Cities10},
+		{"github.com/sams96/rgeo.Countries110", Countries110},
+		{"github.com/sams96/rgeo.Countries10", Countries10},
+		{"github.com/sams96/rgeo.Provinces10", Provinces10},
+		{"github.com/sams96/rgeo.US_Counties10", US_Counties10},
+		{"github.com/sams96/rgeo.Cities10", Cities10},
 	}
 	for _, c := range cases {
 		c := c
@@ -258,7 +258,7 @@ func TestDatasetNames(t *testing.T) {
 		t.Error(err)
 	}
 
-	expected := []string{"rgeo.Cities10", "rgeo.Countries10", "rgeo.Provinces10", "rgeo.US_Counties10"}
+	expected := []string{"github.com/sams96/rgeo.Cities10", "github.com/sams96/rgeo.Countries10", "github.com/sams96/rgeo.Provinces10", "github.com/sams96/rgeo.US_Counties10"}
 	for i, name := range r.DatasetNames() {
 		if name != expected[i] {
 			t.Errorf("expected: %s, got: %s", expected[i], name)

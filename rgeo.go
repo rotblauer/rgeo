@@ -43,7 +43,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/paulmach/orb"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
@@ -92,7 +91,7 @@ type GeomLookup map[string]map[s2.Shape]orb.Geometry
 
 // getFunctionName returns rgeo.Countries110, rgeo.Countries10, etc.
 func getFunctionName(i interface{}) string {
-	return filepath.Base(runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name())
+	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }
 
 // Rgeo is the type used to hold pre-created polygons for reverse geocoding.
