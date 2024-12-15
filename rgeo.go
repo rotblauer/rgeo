@@ -155,7 +155,7 @@ func New(datasets ...func() []byte) (*Rgeo, error) {
 			// Convert GeoJSON features from geom (multi)polygons to s2 polygons
 			p, err := polygonFromGeometry(c.Geometry)
 			if err != nil {
-				return nil, fmt.Errorf("%s bad polygon in geometry: %w", datasetName, err)
+				return nil, fmt.Errorf("bad polygon in geometry: %w", err)
 			}
 			ret.geoms[datasetName][p] = c.Geometry
 
