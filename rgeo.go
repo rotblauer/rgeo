@@ -235,18 +235,18 @@ func (r *Rgeo) combineLocations(s []s2.Shape) (l Location) {
 }
 
 func (r *Rgeo) ReverseGeocodeWithGeometry(loc orb.Point, dataset string) (LocationWithGeometry, error) {
+	if dataset == "" {
+		return LocationWithGeometry{}, fmt.Errorf("missing parameter: geometry dataset")
+	}
 	containsPointQueryLock.Lock()
 	res := r.query.ContainingShapes(pointFromCoord(loc))
 	containsPointQueryLock.Unlock()
 	if len(res) == 0 {
 		return LocationWithGeometry{}, ErrLocationNotFound
 	}
-	if dataset == "" {
-		return LocationWithGeometry{}, fmt.Errorf("missing parameter: geometry dataset")
-	}
 	shpGeom, ok := r.geoms[dataset]
 	if !ok {
-		return LocationWithGeometry{}, fmt.Errorf("dataset not found: %q", dataset)
+		return LocationWithGeometry{}, fmt.Errorf("dataset geometries not found: %q", dataset)
 	}
 	out := LocationWithGeometry{Location: r.combineLocations(res)}
 	// Assign the geometry that has a match on shape in this dataset.
@@ -258,6 +258,29 @@ func (r *Rgeo) ReverseGeocodeWithGeometry(loc orb.Point, dataset string) (Locati
 		}
 	}
 	return LocationWithGeometry{}, fmt.Errorf("no geometry found for dataset %q", dataset)
+}
+
+func (r *Rgeo) GetGeometry(loc orb.Point, dataset string) (orb.Geometry, error) {
+	if dataset == "" {
+		return nil, fmt.Errorf("missing parameter: geometry dataset")
+	}
+	containsPointQueryLock.Lock()
+	res := r.query.ContainingShapes(pointFromCoord(loc))
+	containsPointQueryLock.Unlock()
+	if len(res) == 0 {
+		return nil, ErrLocationNotFound
+	}
+	shpGeom, ok := r.geoms[dataset]
+	if !ok {
+		return nil, fmt.Errorf("dataset not found: %q", dataset)
+	}
+	for _, shp := range res {
+		geom, ok := shpGeom[shp]
+		if ok {
+			return geom, nil
+		}
+	}
+	return nil, fmt.Errorf("no geometry found for dataset %q", dataset)
 }
 
 // firstNonEmpty returns the first non empty parameter.
