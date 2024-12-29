@@ -272,7 +272,7 @@ func (r *Rgeo) GetGeometry(loc orb.Point, dataset string) (orb.Geometry, error) 
 	}
 	shpGeom, ok := r.geoms[dataset]
 	if !ok {
-		return nil, fmt.Errorf("dataset not found: %q", dataset)
+		return nil, fmt.Errorf("dataset not found: %q (have %v)", dataset, r.DatasetNames())
 	}
 	for _, shp := range res {
 		geom, ok := shpGeom[shp]
